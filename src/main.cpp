@@ -76,6 +76,11 @@ long currentLeftPos = 0;
 long previousRightPos = 0;
 long currentRightPos = 0;
 
+///////////// LED for debugging /////////////////
+const uint8_t l1 = 4;
+const uint8_t l2 = 47;
+const uint8_t l3 = 48;
+
 
 ////////// Function for calculating rad/s ///////////////
 double calculateRadPerSec(long pulseDiff, double dt){
@@ -128,27 +133,47 @@ void velocityCallBack(const geometry_msgs::Twist& vel_msg){
   if (Vx >= 1.0){ //Going forward
     leftSpeed = 9.0;
     rightSpeed = 9.0;
+
+    digitalWrite(l1, HIGH);
+    digitalWrite(l2, LOW);
+    digitalWrite(l3, LOW);
   }
   else if (Vx < 0){ // Going backwards
     leftSpeed = -9.0;
     rightSpeed = -9.0;
+
+    digitalWrite(l1, LOW);
+    digitalWrite(l2, HIGH);
+    digitalWrite(l3, LOW);
   }
-  else if (Vz >= 0.5) {
+  else if (Vz >= 1.0) {
     leftSpeed = 9.0;
     rightSpeed = -9.0;
+
+    digitalWrite(l1, HIGH);
+    digitalWrite(l2, HIGH);
+    digitalWrite(l3, LOW);
   }
   else if (Vz < 0){
     leftSpeed = -9.0;
     rightSpeed = 9.0;
+
+    digitalWrite(l1, LOW);
+    digitalWrite(l2, HIGH);
+    digitalWrite(l3, HIGH);
   }
   else {
     leftSpeed = 0;
     rightSpeed = 0;
+
+    digitalWrite(l1, LOW);
+    digitalWrite(l2, LOW);
+    digitalWrite(l3, HIGH);
   }
 }
 
 // Ros subscruber /cmd_vel
-ros::Subscriber<geometry_msgs::Twist> vel_sub("cmd_vel", velocityCallBack);
+ros::Subscriber<geometry_msgs::Twist> vel_sub("turtle1/cmd_vel", velocityCallBack);
 
 // ROS publishers leftSpeed and rightSpeed
 std_msgs::Float32 left_rad_speed;
@@ -173,6 +198,10 @@ void setup() {
   pinMode(rightMotor.In1, OUTPUT);
   pinMode(rightMotor.In2, OUTPUT);
 
+  pinMode(l1, OUTPUT);
+  pinMode(l2, OUTPUT);
+  pinMode(l3, OUTPUT);
+
   ESP32Encoder::useInternalWeakPullResistors = puType::up;
   leftEnc.attachFullQuad(leftMotor.encA, leftMotor.encB);
   leftEnc.clearCount();
@@ -184,6 +213,8 @@ void setup() {
 
   ledcAttachPin(leftMotor.PWM, leftMotor.MC);
   ledcAttachPin(rightMotor.PWM, rightMotor.MC);
+
+  digitalWrite(l1, HIGH);
 }
 
 void loop() {
@@ -217,9 +248,9 @@ void loop() {
     previousMillis = currentMillis;
 
       // Debugging
-    Serial.print(left_vel_in_rad);
-    Serial.print("\t ");
-    Serial.println(right_vel_in_rad);
+    // Serial.print(left_vel_in_rad);
+    // Serial.print("\t ");
+    // Serial.println(right_vel_in_rad);
   }
 
   left_rad_speed.data = (left_vel_in_rad);
