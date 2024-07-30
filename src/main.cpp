@@ -1,11 +1,13 @@
 #include <Arduino.h>
 #include <ESP32Encoder.h>
 #include <PID.h>
+#include <DS_Sensor.h>
 
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Float32.h>
 #include <std_msgs/Int8.h>
+#include <sensor_msgs/Range.h>
 
 //Struct for Motor pins
 struct Motor{
@@ -82,7 +84,21 @@ const uint8_t l1 = 4;
 const uint8_t l2 = 47;
 const uint8_t l3 = 48;
 
-////////////// Robot Constants //////////////////////
+/////////////////// Sensors /////////////////////
+
+const int DS_pin = 8;
+const int OS1_pin = 18;
+const int OS2_pin = 17;
+
+int lastOS1state = 0;
+int lastOS2state = 0;
+
+float distanceValue = 0.0;
+
+DS_Sensor DS(DS_pin);
+
+
+///////////////////// Robot Constants //////////////////////
 const double R = 33.5 / 1000;  // Wheel Radius
 const double L = 81.5 / 1000.0; // Distance from center to wheel
 
@@ -160,6 +176,8 @@ std_msgs::Int8 DS_value;
 std_msgs::Int8 OS1state;
 std_msgs::Int8 OS2state;
 
+ros::Publisher DS_pub("Distance_Sensor", &DS_value);
+
 void setup() {
   // Serial.begin(115200);
   // initialize ROS subs and pubs
@@ -167,6 +185,7 @@ void setup() {
   nh.subscribe(vel_sub);
   nh.advertise(leftSpeed_pub);
   nh.advertise(rightSpeed_pub);
+  nh.advertise(DS_pub);
 
   //setup pins
   pinMode(leftMotor.PWM, OUTPUT);
@@ -179,6 +198,9 @@ void setup() {
   pinMode(l1, OUTPUT);
   pinMode(l2, OUTPUT);
   pinMode(l3, OUTPUT);
+
+  pinMode(OS1_pin, INPUT_PULLDOWN);
+  pinMode(OS2_pin, INPUT_PULLDOWN);
 
   ESP32Encoder::useInternalWeakPullResistors = puType::up;
   leftEnc.attachFullQuad(leftMotor.encA, leftMotor.encB);
@@ -225,6 +247,8 @@ void loop() {
     setSpeed(leftPWM, rightPWM);
     previousMillis = currentMillis;
 
+
+    distanceValue = DS.getDistance();
       // Debugging
     // Serial.print(leftSpeed);
     // Serial.print(": ");
@@ -233,6 +257,7 @@ void loop() {
     // Serial.print(rightSpeed);
     // Serial.print(": ");
     // Serial.println(rightPWM);
+    Serial.println(distanceValue);
   }
 
   left_rad_speed.data = (left_vel_in_rad)  ;
