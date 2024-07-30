@@ -5,6 +5,7 @@
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/Int8.h>
 
 //Struct for Motor pins
 struct Motor{
@@ -42,7 +43,7 @@ ESP32Encoder leftEnc;
 ESP32Encoder rightEnc;
 
 //////////////// PID gains for both motors ///////////////////
-PIDGains leftGains(1.331, 66.56, 0.0);
+PIDGains leftGains(2.683, 134.17, 0.0);
 PIDGains rightGains(2.683, 134.17, 0.0);
 
 ///////////////// Variables for angular velocity /////////////////
@@ -52,8 +53,8 @@ double left_vel_in_rad = 0;
 double right_vel_in_rad = 0;
 
 // Desire motor velocity in rad/s
-double leftSpeed = 10;
-double rightSpeed = 10;
+double leftSpeed = 0;
+double rightSpeed = 0;
 
 // PWM duty cycle calculated with PID
 double leftPWM;
@@ -80,6 +81,11 @@ long currentRightPos = 0;
 const uint8_t l1 = 4;
 const uint8_t l2 = 47;
 const uint8_t l3 = 48;
+
+////////////// Robot Constants //////////////////////
+const double R = 33.5 / 1000;  // Wheel Radius
+const double L = 81.5 / 1000.0; // Distance from center to wheel
+
 
 
 ////////// Function for calculating rad/s ///////////////
@@ -122,58 +128,20 @@ void setSpeed(double Lvel, double Rvel){
 //////////////// ROS node: Subscruber and publishers //////////
 ros::NodeHandle nh;
 
-double Vx = 0;
-double Vz = 0;
+double Vx = 0.0;
+double Vz = 0.0;
 
 //Call Back Function to read the velocities
 void velocityCallBack(const geometry_msgs::Twist& vel_msg){
   Vx = vel_msg.linear.x;
   Vz = vel_msg.angular.z;
 
-  if (Vx >= 1.0){ //Going forward
-    leftSpeed = 9.0;
-    rightSpeed = 9.0;
-
-    digitalWrite(l1, HIGH);
-    digitalWrite(l2, LOW);
-    digitalWrite(l3, LOW);
-  }
-  else if (Vx < 0){ // Going backwards
-    leftSpeed = -9.0;
-    rightSpeed = -9.0;
-
-    digitalWrite(l1, LOW);
-    digitalWrite(l2, HIGH);
-    digitalWrite(l3, LOW);
-  }
-  else if (Vz >= 1.0) {
-    leftSpeed = 9.0;
-    rightSpeed = -9.0;
-
-    digitalWrite(l1, HIGH);
-    digitalWrite(l2, HIGH);
-    digitalWrite(l3, LOW);
-  }
-  else if (Vz < 0){
-    leftSpeed = -9.0;
-    rightSpeed = 9.0;
-
-    digitalWrite(l1, LOW);
-    digitalWrite(l2, HIGH);
-    digitalWrite(l3, HIGH);
-  }
-  else {
-    leftSpeed = 0;
-    rightSpeed = 0;
-
-    digitalWrite(l1, LOW);
-    digitalWrite(l2, LOW);
-    digitalWrite(l3, HIGH);
-  }
+  leftSpeed = (Vx + L * Vz) / R;
+  rightSpeed = (Vx - L * Vz) / R;
 }
 
 // Ros subscruber /cmd_vel
-ros::Subscriber<geometry_msgs::Twist> vel_sub("turtle1/cmd_vel", velocityCallBack);
+ros::Subscriber<geometry_msgs::Twist> vel_sub("cmd_vel", velocityCallBack);
 
 // ROS publishers leftSpeed and rightSpeed
 std_msgs::Float32 left_rad_speed;
@@ -181,6 +149,7 @@ ros::Publisher leftSpeed_pub("leftSpeed", &left_rad_speed);
 
 std_msgs::Float32 right_rad_speed;
 ros::Publisher rightSpeed_pub("rightSpeed", &right_rad_speed);
+
 
 void setup() {
   // Serial.begin(115200);
@@ -248,17 +217,21 @@ void loop() {
     previousMillis = currentMillis;
 
       // Debugging
-    // Serial.print(left_vel_in_rad);
+    // Serial.print(leftSpeed);
+    // Serial.print(": ");
+    // Serial.print(leftPWM);
     // Serial.print("\t ");
-    // Serial.println(right_vel_in_rad);
+    // Serial.print(rightSpeed);
+    // Serial.print(": ");
+    // Serial.println(rightPWM);
   }
 
-  left_rad_speed.data = (left_vel_in_rad);
+  left_rad_speed.data = (left_vel_in_rad)  ;
   right_rad_speed.data = (right_vel_in_rad);
-
 
   leftSpeed_pub.publish(&left_rad_speed);
   rightSpeed_pub.publish(&right_rad_speed);
+
 
   nh.spinOnce();
 }
