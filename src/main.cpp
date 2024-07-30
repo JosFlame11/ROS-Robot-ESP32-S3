@@ -139,10 +139,14 @@ void velocityCallBack(const geometry_msgs::Twist& vel_msg){
   leftSpeed = (Vx + L * Vz) / R;
   rightSpeed = (Vx - L * Vz) / R;
 }
-
-// Ros subscruber /cmd_vel
+//////////// ROS SUBSCRIBERS ///////////////////
+// Ros subscriber /cmd_vel
 ros::Subscriber<geometry_msgs::Twist> vel_sub("cmd_vel", velocityCallBack);
 
+// ROS subscriber for servo motors
+
+
+////////////// ROS PUBLISHERS ////////////////////
 // ROS publishers leftSpeed and rightSpeed
 std_msgs::Float32 left_rad_speed;
 ros::Publisher leftSpeed_pub("leftSpeed", &left_rad_speed);
@@ -150,6 +154,11 @@ ros::Publisher leftSpeed_pub("leftSpeed", &left_rad_speed);
 std_msgs::Float32 right_rad_speed;
 ros::Publisher rightSpeed_pub("rightSpeed", &right_rad_speed);
 
+// ROS publishers for distance sensor, and optoswitches (quitar si es necesario)
+
+std_msgs::Int8 DS_value;
+std_msgs::Int8 OS1state;
+std_msgs::Int8 OS2state;
 
 void setup() {
   // Serial.begin(115200);
