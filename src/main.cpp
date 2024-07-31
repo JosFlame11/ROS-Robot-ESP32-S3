@@ -316,9 +316,9 @@ void setup() {
   ledcAttachPin(rightMotor.PWM, rightMotor.MC);
 
   digitalWrite(l1, HIGH);
-  shoulder.write(90);
-  elbow.write(90);
-  wrist.write(90);
+  shoulder.write(pos[0]);
+  elbow.write(pos[1]);
+  wrist.write(pos[2]);
   gripper.writeMicroseconds(0);
   currentGripperState = gripperState[0];
 
