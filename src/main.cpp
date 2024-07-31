@@ -6,7 +6,7 @@
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
 #include <std_msgs/Float32.h>
-#include <std_msgs/Int8.h>
+// #include <std_msgs/Int8.h>
 #include <sensor_msgs/Range.h>
 
 //Struct for Motor pins
@@ -141,6 +141,18 @@ void setSpeed(double Lvel, double Rvel){
 
 }
 
+///////////// Function for reading the Distance Sensor //////////////
+float distance(int n){
+  long sum = 0;
+  for(int i = 0; i < n; i++){
+    sum =+analogRead(4);
+  }  
+  float lct = sum/n;
+  float distance_cm = 17170.23 * pow(lct, -1.05); //solution of 5cm to 2380,and 30cm to 430
+  return(distance_cm);
+}
+
+
 //////////////// ROS node: Subscruber and publishers //////////
 ros::NodeHandle nh;
 
@@ -172,11 +184,11 @@ ros::Publisher rightSpeed_pub("rightSpeed", &right_rad_speed);
 
 // ROS publishers for distance sensor, and optoswitches (quitar si es necesario)
 
-std_msgs::Int8 DS_value;
-std_msgs::Int8 OS1state;
-std_msgs::Int8 OS2state;
-
-ros::Publisher DS_pub("Distance_Sensor", &DS_value);
+// std_msgs::Int8 DS_value;
+// std_msgs::Int8 OS1state;
+// std_msgs::Int8 OS2state;
+sensor_msgs::Range distance_msg;
+ros::Publisher DS_pub("Distance_Sensor", &distance_msg);
 
 void setup() {
   // Serial.begin(115200);
@@ -186,6 +198,12 @@ void setup() {
   nh.advertise(leftSpeed_pub);
   nh.advertise(rightSpeed_pub);
   nh.advertise(DS_pub);
+
+  distance_msg.radiation_type = sensor_msgs::Range::INFRARED;
+  distance_msg.header.frame_id =  "/ir_ranger";
+  distance_msg.field_of_view = 0.01;
+  distance_msg.min_range = 0.05;  // For GP2D120XJ00F only. Adjust for other IR rangers
+  distance_msg.max_range = 0.3;   // For GP2D120XJ00F only. Adjust for other IR rangers
 
   //setup pins
   pinMode(leftMotor.PWM, OUTPUT);
@@ -248,7 +266,14 @@ void loop() {
     previousMillis = currentMillis;
 
 
-    distanceValue = DS.getDistance();
+
+    // Calculate distance
+    distance_msg.range = distance(20);
+    distance_msg.header.stamp = nh.now();
+
+
+
+    // distanceValue = DS.getDistance();
       // Debugging
     // Serial.print(leftSpeed);
     // Serial.print(": ");
@@ -266,6 +291,7 @@ void loop() {
   leftSpeed_pub.publish(&left_rad_speed);
   rightSpeed_pub.publish(&right_rad_speed);
 
-
+  DS_pub.publish(&distance_msg);
+ 
   nh.spinOnce();
 }
