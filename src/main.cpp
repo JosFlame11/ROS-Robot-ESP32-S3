@@ -50,8 +50,8 @@ PIDGains rightGains(2.683, 134.17, 0.0);
 // Variables for angular velocity
 double left_vel_in_rad = 0;
 double right_vel_in_rad = 0;
-double leftSpeed = 5;
-double rightSpeed = 5;
+double leftSpeed = 0;
+double rightSpeed = 0;
 double leftPWM;
 double rightPWM;
 
@@ -97,6 +97,8 @@ Servo gripper;
 int pos[3] = {90, 90, 90}; // Change to static pose angles 
 String gripperState[2] = {"OPEN", "CLOSE"}; // States to keep track of the gripper
 String currentGripperState;
+
+char cmd = ' ';
 
 // Robot Constants
 const double R = 33.5 / 1000;  // Wheel Radius
@@ -158,46 +160,7 @@ void velocityCallBack(const geometry_msgs::Twist& vel_msg) {
 }
 
 void servoCallback(const std_msgs::String& servo_msg){
-  char cmd = servo_msg.data[0];
-  switch (cmd){
-    case 'u': // + shoulder
-    pos[0] = constrain(pos[0] + 5, 0, 180); 
-    shoulder.write(pos[0]);
-    break;
-    case 'j': // - shoulder
-    pos[0] = constrain(pos[0] - 5, 0, 180); 
-    shoulder.write(pos[0]);
-    break;
-    case 'i': // + elbow
-    pos[1] = constrain(pos[1] + 5, 0, 180);
-    elbow.write(pos[1]);
-    break;
-    case 'k': // - elbow
-    pos[1] = constrain(pos[1] - 5, 0, 180);
-    elbow.write(pos[1]);
-    break;
-    case 'o': // + wrist
-    pos[2] = constrain(pos[2] + 5, 0, 180);
-    wrist.write(pos[2]);
-    break;
-    case 'l': // - wrist
-    pos[2] = constrain(pos[2] - 5, 0, 180);
-    wrist.write(pos[2]);
-    break;
-
-    case 'n': // open gripper
-    if (currentGripperState != gripperState[1]){
-      gripper.writeMicroseconds(0);
-      currentGripperState = gripperState[0];
-    }
-    break;
-    case 'm': // close gripper
-    if (currentGripperState != gripperState[0]){
-      gripper.writeMicroseconds(1500);
-      currentGripperState = gripperState[1];
-    }
-    break;
-  }
+  cmd = servo_msg.data[0];
 }
 
 // ROS SUBSCRIBERS
@@ -231,7 +194,7 @@ void publishDataTask(void *parameter) {
     nh.spinOnce();
 
     // Delay to control the publishing rate
-    vTaskDelay(10 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
 
@@ -270,10 +233,55 @@ void motorControlTask(void *parameter) {
   }
 }
 
+void servoControlTask(void *parameter){
+  while (true){
+    switch (cmd){
+      case 'u': // + shoulder
+      pos[0] = constrain(pos[0] + 5, 0, 180); 
+      shoulder.write(pos[0]);
+      break;
+      case 'j': // - shoulder
+      pos[0] = constrain(pos[0] - 5, 0, 180); 
+      shoulder.write(pos[0]);
+      break;
+      case 'i': // + elbow
+      pos[1] = constrain(pos[1] + 5, 0, 180);
+      elbow.write(pos[1]);
+      break;
+      case 'k': // - elbow
+      pos[1] = constrain(pos[1] - 5, 0, 180);
+      elbow.write(pos[1]);
+      break;
+      case 'o': // + wrist
+      pos[2] = constrain(pos[2] + 5, 0, 180);
+      wrist.write(pos[2]);
+      break;
+      case 'l': // - wrist
+      pos[2] = constrain(pos[2] - 5, 0, 180);
+      wrist.write(pos[2]);
+      break;
+
+      case 'n': // open gripper
+      if (currentGripperState != gripperState[1]){
+        gripper.writeMicroseconds(0);
+        currentGripperState = gripperState[0];
+      }
+      break;
+      case 'm': // close gripper
+      if (currentGripperState != gripperState[0]){
+        gripper.writeMicroseconds(1500);
+        currentGripperState = gripperState[1];
+      }
+      break;
+    }
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+  }
+}
 void setup() {
   // Serial.begin(115200);
   nh.initNode();
   nh.subscribe(vel_sub);
+  nh.subscribe(servo_cmd);
   nh.advertise(leftSpeed_pub);
   nh.advertise(rightSpeed_pub);
   nh.advertise(DS_pub);
@@ -325,6 +333,7 @@ void setup() {
   // Create tasks and assign them to specific cores
   xTaskCreatePinnedToCore(publishDataTask, "Publish Data Task", 10000, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(motorControlTask, "Motor Control Task", 10000, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(servoControlTask, "Servo Control Task", 10000, NULL, 1, NULL, 1);
 }
 
 void loop() {
