@@ -31,8 +31,8 @@ struct PIDGains {
 };
 
 // Declaration of Motors
-Motor leftMotor(2, 13, 12, 9, 3, 0);
-Motor rightMotor(1, 14, 21, 10, 11, 1);
+Motor leftMotor(2, 13, 12, 9, 3, 5);
+Motor rightMotor(1, 14, 21, 10, 11, 6);
 
 // Motor specifications
 const int resolution = 8;
@@ -84,21 +84,17 @@ int lastOS2state = 0;
 float distanceValue = 0.0;
 
 // Servos
-const int servoShoulder_pin = 15;
-const int servoElbow_pin = 7;
-const int servoWrist_pin = 6;
-const int servoGripper_pin = 5;
+#define servoShoulder_pin 15
+#define servoElbow_pin 7
+#define servoWrist_pin 6
+#define servoGripper_pin 5
 
 Servo shoulder;
 Servo elbow;
 Servo wrist;
 Servo gripper;
 
-int pos[3] = {90, 90, 90}; // Change to static pose angles 
-String gripperState[2] = {"OPEN", "CLOSE"}; // States to keep track of the gripper
-String currentGripperState;
 
-char cmd = ' ';
 
 // Robot Constants
 const double R = 33.5 / 1000;  // Wheel Radius
@@ -159,13 +155,30 @@ void velocityCallBack(const geometry_msgs::Twist& vel_msg) {
   rightSpeed = (Vx - L * Vz) / R;
 }
 
-void servoCallback(const std_msgs::String& servo_msg){
-  cmd = servo_msg.data[0];
+void servo1Callback(const std_msgs::Float32& msg) {
+    shoulder.write(msg.data);
 }
 
+void servo2Callback(const std_msgs::Float32& msg) {
+    elbow.write(msg.data);
+}
+
+void servo3Callback(const std_msgs::Float32& msg) {
+    wrist.write(msg.data);
+}
+
+void servo4Callback(const std_msgs::Float32& msg) {
+  if (msg.data == 1){
+    gripper.write(msg.data);
+  }
+}
 // ROS SUBSCRIBERS
 ros::Subscriber<geometry_msgs::Twist> vel_sub("cmd_vel", velocityCallBack);
-ros::Subscriber<std_msgs::String> servo_cmd("servo_cmd", servoCallback);
+ros::Subscriber<std_msgs::Float32> shoulder_sub("servo1_angle", servo1Callback);
+ros::Subscriber<std_msgs::Float32> elbow_sub("servo2_angle", servo2Callback);
+ros::Subscriber<std_msgs::Float32> wrist_sub("servo3_angle", servo3Callback);
+ros::Subscriber<std_msgs::Float32> gripper_sub("servo4_angle", servo4Callback);
+
 
 // ROS PUBLISHERS
 std_msgs::Float32 left_rad_speed;
@@ -233,55 +246,20 @@ void motorControlTask(void *parameter) {
   }
 }
 
-void servoControlTask(void *parameter){
-  while (true){
-    switch (cmd){
-      case 'u': // + shoulder
-      pos[0] = constrain(pos[0] + 5, 0, 180); 
-      shoulder.write(pos[0]);
-      break;
-      case 'j': // - shoulder
-      pos[0] = constrain(pos[0] - 5, 0, 180); 
-      shoulder.write(pos[0]);
-      break;
-      case 'i': // + elbow
-      pos[1] = constrain(pos[1] + 5, 0, 180);
-      elbow.write(pos[1]);
-      break;
-      case 'k': // - elbow
-      pos[1] = constrain(pos[1] - 5, 0, 180);
-      elbow.write(pos[1]);
-      break;
-      case 'o': // + wrist
-      pos[2] = constrain(pos[2] + 5, 0, 180);
-      wrist.write(pos[2]);
-      break;
-      case 'l': // - wrist
-      pos[2] = constrain(pos[2] - 5, 0, 180);
-      wrist.write(pos[2]);
-      break;
-
-      case 'n': // open gripper
-      if (currentGripperState != gripperState[1]){
-        gripper.writeMicroseconds(0);
-        currentGripperState = gripperState[0];
-      }
-      break;
-      case 'm': // close gripper
-      if (currentGripperState != gripperState[0]){
-        gripper.writeMicroseconds(1500);
-        currentGripperState = gripperState[1];
-      }
-      break;
-    }
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-  }
-}
 void setup() {
   // Serial.begin(115200);
+
+  shoulder.attach(servoShoulder_pin);
+  elbow.attach(servoElbow_pin);
+  wrist.attach(servoWrist_pin);
+  gripper.attach(servoGripper_pin);
+
   nh.initNode();
   nh.subscribe(vel_sub);
-  nh.subscribe(servo_cmd);
+  nh.subscribe(shoulder_sub);
+  nh.subscribe(elbow_sub);
+  nh.subscribe(wrist_sub);
+  nh.subscribe(gripper_sub);
   nh.advertise(leftSpeed_pub);
   nh.advertise(rightSpeed_pub);
   nh.advertise(DS_pub);
@@ -311,12 +289,6 @@ void setup() {
   leftEnc.clearCount();
   rightEnc.attachFullQuad(rightMotor.encA, rightMotor.encB);
   rightEnc.clearCount();
-
-  shoulder.attach(servoShoulder_pin);
-  elbow.attach(servoElbow_pin);
-  wrist.attach(servoWrist_pin);
-  gripper.attach(servoGripper_pin);
-
   ledcSetup(leftMotor.MC, freq, resolution);
   ledcSetup(rightMotor.MC, freq, resolution);
 
@@ -324,16 +296,14 @@ void setup() {
   ledcAttachPin(rightMotor.PWM, rightMotor.MC);
 
   digitalWrite(l1, HIGH);
-  shoulder.write(pos[0]);
-  elbow.write(pos[1]);
-  wrist.write(pos[2]);
-  gripper.writeMicroseconds(0);
-  currentGripperState = gripperState[0];
 
+  shoulder.write(100);
+  elbow.write(90);
+  wrist.write(90);
+  gripper.write(0);
   // Create tasks and assign them to specific cores
   xTaskCreatePinnedToCore(publishDataTask, "Publish Data Task", 10000, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(motorControlTask, "Motor Control Task", 10000, NULL, 1, NULL, 1);
-  xTaskCreatePinnedToCore(servoControlTask, "Servo Control Task", 10000, NULL, 1, NULL, 1);
 }
 
 void loop() {
