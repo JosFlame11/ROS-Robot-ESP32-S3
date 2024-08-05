@@ -297,10 +297,10 @@ void setup() {
 
   digitalWrite(l1, HIGH);
 
-  shoulder.write(100);
-  elbow.write(90);
-  wrist.write(90);
-  gripper.write(0);
+  shoulder.write(165);
+  elbow.write(0);
+  wrist.write(170);
+  // gripper.write(170);
   // Create tasks and assign them to specific cores
   xTaskCreatePinnedToCore(publishDataTask, "Publish Data Task", 10000, NULL, 1, NULL, 0);
   xTaskCreatePinnedToCore(motorControlTask, "Motor Control Task", 10000, NULL, 1, NULL, 1);
