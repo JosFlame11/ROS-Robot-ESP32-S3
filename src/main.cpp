@@ -2,6 +2,8 @@
 
 #include <ESP32Encoder.h>
 #include <PID.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_MPU6050.h>
 
 // ------- ROS2 headers ------- //
 #include "micro_ros_platformio.h"
@@ -11,6 +13,7 @@
 
 #include <std_msgs/msg/int8.h>
 #include <std_msgs/msg/float32.h>
+#include <sensor_msgs/msg/imu.h>
 
 // ------ Motor and sensor Definition ------ //
 // Leds for debugging
@@ -54,15 +57,15 @@ ESP32Encoder rightEnc;
 
 // Variables for velocity control
 // velocity of the encoders
-float left_vel_in_rad = 0;
-float right_vel_in_rad = 0;
+double left_vel_in_rad = 0;
+double right_vel_in_rad = 0;
 
 // velocity expected
 double leftSpeed = 0;
 double rightSpeed = 0;
 
-int leftPWM;
-int rightPWM;
+double leftPWM;
+double rightPWM;
 
 // Variables for velocity calculations
 unsigned long previousMillis = 0;
@@ -70,10 +73,17 @@ unsigned long currentMillis = 0;
 double dt = 0;
 
 // Pulses variables for velocity calculation
-long prev_left_pos = 0;
-long curr_left_pos = 0;
-long prev_right_pos = 0;
-long curr_right_pos = 0;
+unsigned long prev_left_pos = 0;
+unsigned long curr_left_pos = 0;
+unsigned long prev_right_pos = 0;
+unsigned long curr_right_pos = 0;
+
+// Create the IMU object
+Adafruit_MPU6050 MPU;
+
+// PID objects for each motor
+PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 1.0, 0.0, 0.0);
+PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 1.0, 0.0, 0.0);
 
 // ------- Micro-Ros Initialization ------ //
 rcl_publisher_t left_vel_pub;
@@ -82,6 +92,8 @@ rcl_publisher_t right_vel_pub;
 rcl_publisher_t DS1_state_pub;
 rcl_publisher_t DS2_state_pub;
 rcl_publisher_t DS3_state_pub;
+
+rcl_publisher_t imu_data_pub;
 
 rcl_subscription_t left_vel_sub;
 rcl_subscription_t right_vel_sub;
@@ -93,7 +105,7 @@ rcl_timer_t timer;
 rclc_executor_t executor;
 
 // Timer
-const unsigned int send_msg_timer = RCL_MS_TO_NS(100);
+const unsigned int send_msg_timer = RCL_MS_TO_NS(50);
 
 // Error handler
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
@@ -101,9 +113,10 @@ const unsigned int send_msg_timer = RCL_MS_TO_NS(100);
 // Publisher mesages
 std_msgs__msg__Float32 left_vel_msgout;
 std_msgs__msg__Float32 right_vel_msgout;
-std_msgs__msg__Int8 ds1_state_msgout;
-std_msgs__msg__Int8 ds2_state_msgout;
-std_msgs__msg__Int8 ds3_state_msgout;
+std_msgs__msg__Int8 os1_state_msgout;
+std_msgs__msg__Int8 os2_state_msgout;
+std_msgs__msg__Int8 os3_state_msgout;
+sensor_msgs__msg__Imu imu_msgout;
 
 // Subscriber msgs
 std_msgs__msg__Float32 left_vel_msgin;
@@ -111,8 +124,8 @@ std_msgs__msg__Float32 right_vel_msgin;
 
 // ------ Function declaration ------ //
 //Function for converting pulses into rad/s
-float calculateRadPerSec(long pulseDiff, double dt){
-  float revolution = static_cast<float>(pulseDiff) / (2 * CPR * gear_ratio);
+double calculateRadPerSec(long pulseDiff, double dt){
+  double revolution = static_cast<double>(pulseDiff) / (2 * CPR * gear_ratio);
   return (revolution * (2 * PI) / dt);
 }
 
@@ -141,6 +154,25 @@ void setSpeed(double Lvel, double Rvel) {
   ledcWrite(rightMotor.MC, fabs(Rvel));
 }
 
+void getImuData(){
+  sensors_event_t a, g, temp;
+  MPU.getEvent(&a, &g, &temp);
+
+  imu_msgout.linear_acceleration.x = a.acceleration.x;
+  imu_msgout.linear_acceleration.y = a.acceleration.y;
+  imu_msgout.linear_acceleration.z = a.acceleration.z;
+
+  imu_msgout.angular_velocity.x = g.acceleration.x;
+  imu_msgout.angular_velocity.y = g.acceleration.y;
+  imu_msgout.angular_velocity.z = g.acceleration.z;
+}
+
+void getSensorData(){
+  os1_state_msgout.data = digitalRead(OS1_PIN);
+  os2_state_msgout.data = digitalRead(OS2_PIN);
+  os3_state_msgout.data = digitalRead(OS3_PIN);
+}
+
 // ------ Callback Functions ------ //
 // changes left wheel velocity
 void left_vel_callback(const void * msgin){
@@ -161,15 +193,15 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time){
     // Publish messages
     left_vel_msgout.data = left_vel_in_rad;
     right_vel_msgout.data = right_vel_in_rad;
-    ds1_state_msgout.data = 0;
-    ds2_state_msgout.data = 0;
-    ds3_state_msgout.data = 0;
+    getSensorData();
+    getImuData();
 
     RCSOFTCHECK(rcl_publish(&left_vel_pub, &left_vel_msgout, NULL));
     RCSOFTCHECK(rcl_publish(&right_vel_pub, &right_vel_msgout, NULL));
-    RCSOFTCHECK(rcl_publish(&DS1_state_pub, &ds1_state_msgout, NULL));
-    RCSOFTCHECK(rcl_publish(&DS2_state_pub, &ds2_state_msgout, NULL));
-    RCSOFTCHECK(rcl_publish(&DS3_state_pub, &ds3_state_msgout, NULL));
+    RCSOFTCHECK(rcl_publish(&DS1_state_pub, &os1_state_msgout, NULL));
+    RCSOFTCHECK(rcl_publish(&DS2_state_pub, &os2_state_msgout, NULL));
+    RCSOFTCHECK(rcl_publish(&DS3_state_pub, &os3_state_msgout, NULL));
+    RCSOFTCHECK(rcl_publish(&imu_data_pub, &imu_msgout, NULL))
   }
 
 }
@@ -182,7 +214,7 @@ void motorControlTask(void *parameter){
     dt = static_cast<double>(currentMillis - previousMillis) / 1000.0;
 
     if(dt == 0){
-      dt = 0.001;
+      dt = 0.0001;
     }
     curr_left_pos = leftEnc.getCount();
     curr_right_pos = rightEnc.getCount();
@@ -198,6 +230,9 @@ void motorControlTask(void *parameter){
     right_vel_in_rad = calculateRadPerSec(right_pos_diff, dt);
 
     // Fill here with code to control motors
+    pid_left.calculate();
+    pid_right.calculate();
+    setSpeed(leftPWM, rightPWM);
 
     previousMillis = currentMillis;
 
@@ -232,19 +267,25 @@ void setup() {
     &DS1_state_pub,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
-    "DS1_state");
+    "DS1/state");
   
   rclc_publisher_init_default(
     &DS2_state_pub,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
-    "DS2_state");
+    "DS2/state");
 
   rclc_publisher_init_default(
     &DS3_state_pub,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int8),
-    "DS3_state");
+    "DS3/state");
+
+  rclc_publisher_init_default(
+    &imu_data_pub,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Imu),
+    "imu/data");
 
   rclc_subscription_init_default(
     &left_vel_sub,
@@ -299,6 +340,15 @@ void setup() {
 
   ledcAttachPin(leftMotor.PWM, leftMotor.MC);
   ledcAttachPin(rightMotor.PWM, rightMotor.MC);
+
+  if (!MPU.begin()){
+    Serial.println("Failed to initialize IMU");
+      while (1){
+        delay(1000);
+      }
+  }
+  MPU.setHighPassFilter(MPU6050_HIGHPASS_0_63_HZ);
+  
 
   digitalWrite(L1, HIGH);
 
