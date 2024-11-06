@@ -38,7 +38,7 @@ struct Motor {
   Motor(int pwm, int in1, int in2, int enca, int encb, int mc) : PWM(pwm), In1(in1), In2(in2), encA(enca), encB(encb), MC(mc) {}
 };
 
-Motor leftMotor(2, 13, 12, 9, 3, 5);
+Motor leftMotor(2, 13, 12, 7, 3, 5);
 Motor rightMotor(1, 14, 21, 10, 11, 6);
 
 // Motor specifications
@@ -64,8 +64,8 @@ double right_vel_in_rad = 0;
 double leftSpeed = 0;
 double rightSpeed = 0;
 
-double leftPWM;
-double rightPWM;
+double leftPWM = 0;
+double rightPWM = 0;
 
 // Variables for velocity calculations
 unsigned long previousMillis = 0;
@@ -82,8 +82,8 @@ unsigned long curr_right_pos = 0;
 Adafruit_MPU6050 MPU;
 
 // PID objects for each motor
-PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 1.0, 0.0, 0.0);
-PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 1.0, 0.0, 0.0);
+PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 2.683, 134.17, 0.0);
+PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 2.683, 134.17, 0.0);
 
 // ------- Micro-Ros Initialization ------ //
 rcl_publisher_t left_vel_pub;
@@ -142,7 +142,7 @@ void setSpeed(double Lvel, double Rvel) {
     digitalWrite(leftMotor.In2, HIGH);
   }
 
-  if (Rvel > 0) {
+  if (Rvel < 0) {
     digitalWrite(rightMotor.In1, HIGH);
     digitalWrite(rightMotor.In2, LOW);
   } else {
@@ -158,6 +158,9 @@ void getImuData(){
   sensors_event_t a, g, temp;
   MPU.getEvent(&a, &g, &temp);
 
+  char* frame_id = "chassis";
+  imu_msgout.header.frame_id.data = frame_id;
+
   imu_msgout.linear_acceleration.x = a.acceleration.x;
   imu_msgout.linear_acceleration.y = a.acceleration.y;
   imu_msgout.linear_acceleration.z = a.acceleration.z;
@@ -165,6 +168,7 @@ void getImuData(){
   imu_msgout.angular_velocity.x = g.acceleration.x;
   imu_msgout.angular_velocity.y = g.acceleration.y;
   imu_msgout.angular_velocity.z = g.acceleration.z;
+
 }
 
 void getSensorData(){
@@ -214,7 +218,7 @@ void motorControlTask(void *parameter){
     dt = static_cast<double>(currentMillis - previousMillis) / 1000.0;
 
     if(dt == 0){
-      dt = 0.0001;
+      dt = 0.001;
     }
     curr_left_pos = leftEnc.getCount();
     curr_right_pos = rightEnc.getCount();
@@ -291,13 +295,13 @@ void setup() {
     &left_vel_sub,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
-    "leftSpeed");
+    "leftWheelCommand");
 
   rclc_subscription_init_default(
     &right_vel_sub,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32),
-    "rightSpeed");
+    "rightWheelCommand");
 
 
   RCSOFTCHECK(rclc_timer_init_default(
