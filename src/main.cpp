@@ -3,6 +3,7 @@
 #include <ESP32Encoder.h>
 // #include <PID.h>
 #include "StateFeedbackController.h"
+#include <filters.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_MPU6050.h>
 
@@ -116,6 +117,14 @@ StateFeedbackController rightMotorController(A_R, B_R, C_R, D_R, Kx_R, Ki_R, L, 
 
 const int res = 8;
 const int freq = 30000;
+
+//-------------Filter Variables--------------
+const float cutoff_freq = 15.0;
+const float sampling_time = Ts;
+IIR::ORDER order = IIR::ORDER::OD2;
+
+Filter fl(cutoff_freq, sampling_time, order);
+Filter fr(cutoff_freq, sampling_time, order);
 
 
 // ------- Micro-Ros Initialization ------ //
@@ -263,8 +272,8 @@ void motorControlTask(void *parameter){
     prev_right_pos = curr_right_pos;
 
     // calculate velocity for both motors
-    left_vel_in_rad = calculateRadPerSec(left_pos_diff, dt);
-    right_vel_in_rad = calculateRadPerSec(right_pos_diff, dt);
+    left_vel_in_rad = fl.filterIn(calculateRadPerSec(left_pos_diff, dt));
+    right_vel_in_rad = fr.filterIn(calculateRadPerSec(right_pos_diff, dt));
 
     // Fill here with code to control motors
     leftMotorController.update();
