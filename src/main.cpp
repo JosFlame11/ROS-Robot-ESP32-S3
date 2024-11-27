@@ -1,7 +1,8 @@
 #include <Arduino.h>
 
 #include <ESP32Encoder.h>
-#include <PID.h>
+// #include <PID.h>
+#include "StateFeedbackController.h"
 #include <Adafruit_Sensor.h>
 #include <Adafruit_MPU6050.h>
 
@@ -22,9 +23,9 @@
 #define L3 48
 
 // Sensors
-#define OS1_PIN 18
-#define OS2_PIN 17
-#define OS3_PIN 16
+#define OS1_PIN 18 // Right
+#define OS2_PIN 17 // Front
+#define OS3_PIN 16 // Left
 
 // Motors
 struct Motor {
@@ -82,8 +83,40 @@ unsigned long curr_right_pos = 0;
 Adafruit_MPU6050 MPU;
 
 // PID objects for each motor
-PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 2.683, 134.17, 0.0);
-PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 2.683, 134.17, 0.0);
+// PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 2.683, 134.17, 0.0);
+// PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 2.683, 134.17, 0.0);
+
+// State FeedbackControllers
+BLA::Matrix<3, 3, double> A_L = { -204.9, -798.2, -171.8,
+                         512, 0, 0,
+                         0, 256, 0 };
+BLA::Matrix<3, 1, double> B_L = { 4, 0, 0 };
+BLA::Matrix<1, 3, double> C_L = { 0.9374, -0.3582, 2.908 };
+double D_L = -0.0006;
+BLA::Matrix<1, 3, double> Kx_L = {23.7750, -186.8543, -40.4584};
+double Ki_L = -11.6604;
+// Right Motor
+BLA::Matrix<3, 3, double> A_R = {-231.6, -805.5, -179.6,
+                         512, 0, 0,
+                         0, 256, 0 };
+BLA::Matrix<3, 1, double> B_R = { 4, 0, 0 };
+BLA::Matrix<1, 3, double> C_R = {0.8804,-1.331,2.885};
+double D_R = 0.004519;
+BLA::Matrix<1, 3, double> Kx_R = {17.1000,-188.6782,-42.3636};
+double Ki_R = -11.7534;
+
+// Observer Gain Matrix
+BLA::Matrix<3, 1, double> L = {1.3643, -0.3678, -0.4111};
+
+// Sampling time
+const float Ts = 0.005;
+
+StateFeedbackController leftMotorController(A_L, B_L, C_L, D_L, Kx_L, Ki_L, L, Ts, &left_vel_in_rad, &leftSpeed, &leftPWM);
+StateFeedbackController rightMotorController(A_R, B_R, C_R, D_R, Kx_R, Ki_R, L, Ts, &right_vel_in_rad, &rightSpeed, &rightPWM);
+
+const int res = 8;
+const int freq = 30000;
+
 
 // ------- Micro-Ros Initialization ------ //
 rcl_publisher_t left_vel_pub;
@@ -214,7 +247,7 @@ void timer_callback(rcl_timer_t * timer, int64_t last_call_time){
 void motorControlTask(void *parameter){
   while (true){
    currentMillis = millis();
-   if((currentMillis - previousMillis) >= 10){
+   if((currentMillis - previousMillis) >= 5){
     dt = static_cast<double>(currentMillis - previousMillis) / 1000.0;
 
     if(dt == 0){
@@ -234,9 +267,9 @@ void motorControlTask(void *parameter){
     right_vel_in_rad = calculateRadPerSec(right_pos_diff, dt);
 
     // Fill here with code to control motors
-    pid_left.calculate();
-    pid_right.calculate();
-    setSpeed(leftPWM, rightPWM);
+    leftMotorController.update();
+    rightMotorController.update();
+    setSpeed(constrain(leftPWM, -255, 255), constrain(rightPWM, -255, 255));
 
     previousMillis = currentMillis;
 
