@@ -1,8 +1,8 @@
 #include <Arduino.h>
 
 #include <ESP32Encoder.h>
-// #include <PID.h>
-#include "StateFeedbackController.h"
+#include <PID.h>
+// #include "StateFeedbackController.h"
 #include <filters.h>
 #include <Adafruit_Sensor.h>
 #include <Adafruit_MPU6050.h>
@@ -84,36 +84,36 @@ unsigned long curr_right_pos = 0;
 Adafruit_MPU6050 MPU;
 
 // PID objects for each motor
-// PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 2.683, 134.17, 0.0);
-// PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 2.683, 134.17, 0.0);
+PID pid_left(&left_vel_in_rad, &leftPWM, &leftSpeed, 14.7065, 585.2789, 0.0);
+PID pid_right(&right_vel_in_rad, &rightPWM, &rightSpeed, 13.6398, 578.6164, 0.0);
 
 // State FeedbackControllers
-BLA::Matrix<3, 3, double> A_L = { -204.9, -798.2, -171.8,
-                         512, 0, 0,
-                         0, 256, 0 };
-BLA::Matrix<3, 1, double> B_L = { 4, 0, 0 };
-BLA::Matrix<1, 3, double> C_L = { 0.9374, -0.3582, 2.908 };
-double D_L = -0.0006;
-BLA::Matrix<1, 3, double> Kx_L = {23.7750, -186.8543, -40.4584};
-double Ki_L = -11.6604;
-// Right Motor
-BLA::Matrix<3, 3, double> A_R = {-231.6, -805.5, -179.6,
-                         512, 0, 0,
-                         0, 256, 0 };
-BLA::Matrix<3, 1, double> B_R = { 4, 0, 0 };
-BLA::Matrix<1, 3, double> C_R = {0.8804,-1.331,2.885};
-double D_R = 0.004519;
-BLA::Matrix<1, 3, double> Kx_R = {17.1000,-188.6782,-42.3636};
-double Ki_R = -11.7534;
+// BLA::Matrix<3, 3, double> A_L = { -204.9, -798.2, -171.8,
+//                          512, 0, 0,
+//                          0, 256, 0 };
+// BLA::Matrix<3, 1, double> B_L = { 4, 0, 0 };
+// BLA::Matrix<1, 3, double> C_L = { 0.9374, -0.3582, 2.908 };
+// double D_L = -0.0006;
+// BLA::Matrix<1, 3, double> Kx_L = {23.7750, -186.8543, -40.4584};
+// double Ki_L = -11.6604;
+// // Right Motor
+// BLA::Matrix<3, 3, double> A_R = {-231.6, -805.5, -179.6,
+//                          512, 0, 0,
+//                          0, 256, 0 };
+// BLA::Matrix<3, 1, double> B_R = { 4, 0, 0 };
+// BLA::Matrix<1, 3, double> C_R = {0.8804,-1.331,2.885};
+// double D_R = 0.004519;
+// BLA::Matrix<1, 3, double> Kx_R = {17.1000,-188.6782,-42.3636};
+// double Ki_R = -11.7534;
 
-// Observer Gain Matrix
-BLA::Matrix<3, 1, double> L = {1.3643, -0.3678, -0.4111};
+// // Observer Gain Matrix
+// BLA::Matrix<3, 1, double> L = {1.3643, -0.3678, -0.4111};
 
 // Sampling time
 const float Ts = 0.005;
 
-StateFeedbackController leftMotorController(A_L, B_L, C_L, D_L, Kx_L, Ki_L, L, Ts, &left_vel_in_rad, &leftSpeed, &leftPWM);
-StateFeedbackController rightMotorController(A_R, B_R, C_R, D_R, Kx_R, Ki_R, L, Ts, &right_vel_in_rad, &rightSpeed, &rightPWM);
+// StateFeedbackController leftMotorController(A_L, B_L, C_L, D_L, Kx_L, Ki_L, L, Ts, &left_vel_in_rad, &leftSpeed, &leftPWM);
+// StateFeedbackController rightMotorController(A_R, B_R, C_R, D_R, Kx_R, Ki_R, L, Ts, &right_vel_in_rad, &rightSpeed, &rightPWM);
 
 const int res = 8;
 const int freq = 30000;
@@ -147,7 +147,7 @@ rcl_timer_t timer;
 rclc_executor_t executor;
 
 // Timer
-const unsigned int send_msg_timer = RCL_MS_TO_NS(50);
+const unsigned int send_msg_timer = RCL_MS_TO_NS(5);
 
 // Error handler
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
@@ -193,30 +193,30 @@ void setSpeed(double Lvel, double Rvel) {
   }
 
   ledcWrite(leftMotor.MC, fabs(Lvel));
-  ledcWrite(rightMotor.MC, fabs(Rvel));
+  ledcWrite(rightMotor. MC, fabs(Rvel));
 }
 
 void getImuData(){
   sensors_event_t a, g, temp;
   MPU.getEvent(&a, &g, &temp);
 
-  char* frame_id = "chassis";
+  char* frame_id = (char*)"chassis";
   imu_msgout.header.frame_id.data = frame_id;
 
   imu_msgout.linear_acceleration.x = a.acceleration.x;
   imu_msgout.linear_acceleration.y = a.acceleration.y;
-  imu_msgout.linear_acceleration.z = a.acceleration.z;
+  imu_msgout.linear_acceleration.z = 0.0;
 
-  imu_msgout.angular_velocity.x = g.acceleration.x;
-  imu_msgout.angular_velocity.y = g.acceleration.y;
+  imu_msgout.angular_velocity.x = 0.0;
+  imu_msgout.angular_velocity.y = 0.0;
   imu_msgout.angular_velocity.z = g.acceleration.z;
 
 }
 
 void getSensorData(){
-  os1_state_msgout.data = digitalRead(OS1_PIN);
-  os2_state_msgout.data = digitalRead(OS2_PIN);
-  os3_state_msgout.data = digitalRead(OS3_PIN);
+  os1_state_msgout.data = !digitalRead(OS1_PIN);
+  os2_state_msgout.data = !digitalRead(OS2_PIN);
+  os3_state_msgout.data = !digitalRead(OS3_PIN);
 }
 
 // ------ Callback Functions ------ //
@@ -276,21 +276,21 @@ void motorControlTask(void *parameter){
     right_vel_in_rad = fr.filterIn(calculateRadPerSec(right_pos_diff, dt));
 
     // Fill here with code to control motors
-    leftMotorController.update();
-    rightMotorController.update();
+    pid_left.calculate();
+    pid_right.calculate();
     setSpeed(constrain(leftPWM, -255, 255), constrain(rightPWM, -255, 255));
 
     previousMillis = currentMillis;
 
    }
-   vTaskDelay(10 / portTICK_PERIOD_MS); 
+   vTaskDelay(1 / portTICK_PERIOD_MS); 
   }
 }
 
 void setup() {
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
-  delay(2000);
+  // delay(2000);
 
   // Ros2 setup
   allocator = rcl_get_default_allocator();
@@ -409,5 +409,5 @@ void setup() {
 
 void loop() {
 
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
+  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
 }
